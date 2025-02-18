@@ -69,9 +69,14 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
           Sign in
         </h2>
 
-        {!showEmailInput ? (
-          <>
-            {/* Email and Gmail options */}
+        <div className="relative">
+          <div
+            className={`transform transition-all duration-300 ${
+              !showEmailInput
+                ? 'opacity-100 translate-x-0'
+                : 'opacity-0 translate-x-[-100%] absolute inset-0'
+            }`}
+          >
             <div className="grid grid-cols-2 gap-4 mb-8">
               <button
                 onClick={() => setShowEmailInput(true)}
@@ -189,9 +194,14 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 <span className="text-white text-sm">MetaMask</span>
               </button>
             </div>
-          </>
-        ) : (
-          <div className="mt-4">
+          </div>
+          <div
+            className={`transform transition-all duration-300 ${
+              showEmailInput
+                ? 'opacity-100 translate-x-0'
+                : 'opacity-0 translate-x-[100%] absolute inset-0'
+            }`}
+          >
             <div className="relative mb-8">
               <input
                 type="email"
@@ -229,7 +239,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               </button>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
