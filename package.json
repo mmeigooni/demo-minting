@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@0xsequence/waas": "^2.2.13",
+    "@react-oauth/google": "^0.12.1",
     "@tailwindcss/postcss": "^4.0.6",
     "@tanstack/react-query": "^5.66.7",
     "next": "15.1.7",
