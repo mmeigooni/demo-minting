@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useConnect, useAccount, useDisconnect } from 'wagmi';
 import { metaMask } from 'wagmi/connectors';
@@ -22,12 +22,49 @@ interface CustomGoogleButtonProps {
   onClose: () => void;
 }
 
+const clearExistingSessions = async () => {
+  try {
+    const { isSignedIn } = await checkAuthStatus();
+    if (!isSignedIn) {
+      return; // Skip if not signed in
+    }
+    const sessions = await sequenceWaas.listSessions();
+    if (sessions.length > 0) {
+      await Promise.all(
+        sessions.map((session) =>
+          sequenceWaas.dropSession({ sessionId: session.id })
+        )
+      );
+    }
+  } catch (error) {
+    console.error('Failed to clear sessions:', error);
+  }
+};
+
+const handleDisconnect = async (router: any) => {
+  try {
+    const sessions = await sequenceWaas.listSessions();
+    if (sessions.length > 0) {
+      await sequenceWaas.dropSession({ sessionId: sessions[0].id });
+    }
+    router.push('/');
+  } catch (error) {
+    console.error('Failed to disconnect:', error);
+  }
+};
+
 const CustomGoogleButton = ({ onClose }: CustomGoogleButtonProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleGoogleLogin = async (credentialResponse: CredentialResponse) => {
     try {
       setIsLoading(true);
+      console.log('Starting Google authentication...');
+
+      // Clear any existing sessions first
+      await clearExistingSessions();
+
       const response = await sequenceWaas.signIn(
         {
           idToken: credentialResponse.credential!,
@@ -35,7 +72,20 @@ const CustomGoogleButton = ({ onClose }: CustomGoogleButtonProps) => {
         'Web Session'
       );
       console.log('Wallet created:', response.wallet);
-      onClose();
+
+      // Add a small delay to ensure the session is established
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      console.log('Checking auth status...');
+      const { isSignedIn, address } = await checkAuthStatus();
+      console.log('Auth status:', { isSignedIn, address });
+
+      if (isSignedIn && address) {
+        onClose();
+        router.push('/connected');
+      } else {
+        console.error('Wallet created but not signed in');
+      }
     } catch (error) {
       console.error('Google authentication failed:', error);
     } finally {
@@ -66,7 +116,16 @@ const CustomGoogleButton = ({ onClose }: CustomGoogleButtonProps) => {
 
 export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [showEmailInput, setShowEmailInput] = useState(false);
+  const [showOTPInput, setShowOTPInput] = useState(false);
   const [email, setEmail] = useState('');
+  const [otp, setOTP] = useState('');
+  const [isEmailLoading, setIsEmailLoading] = useState(false);
+  const [isOTPLoading, setIsOTPLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [respondWithCode, setRespondWithCode] = useState<
+    ((code: string) => Promise<void>) | null
+  >(null);
+  const router = useRouter();
   const { connect, connectors, isPending } = useConnect();
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
@@ -77,16 +136,79 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
   const handleMetaMaskClick = async () => {
     try {
+      // Clear any existing sessions first
+      await clearExistingSessions();
       await connect({ connector: metaMask() });
     } catch (error) {
       console.error('MetaMask connection error:', error);
     }
   };
 
-  const handleEmailSubmit = () => {
+  // Set up handlers on mount
+  useEffect(() => {
+    // Set up email auth code handler
+    const authHandler = sequenceWaas.onEmailAuthCodeRequired(
+      async (respondWithCode) => {
+        setShowOTPInput(true);
+        setRespondWithCode(() => respondWithCode);
+        setIsEmailLoading(false);
+      }
+    );
+
+    // Set up email conflict handler to always force create
+    const conflictHandler = sequenceWaas.onEmailConflict(
+      async (info, forceCreate) => {
+        try {
+          await forceCreate(); // Always create new wallet
+        } catch (error) {
+          setError('Failed to create account. Please try again.');
+          setIsEmailLoading(false);
+        }
+      }
+    );
+
+    // Clean up both handlers
+    return () => {
+      authHandler();
+      conflictHandler();
+    };
+  }, []);
+
+  const handleEmailSubmit = async () => {
     if (isValidEmail(email)) {
-      // Handle email submission
-      console.log('Email submitted:', email);
+      setIsEmailLoading(true);
+      setError(null);
+      try {
+        // Clear any existing sessions first
+        await clearExistingSessions();
+
+        // This will remain pending until OTP is verified
+        const response = await sequenceWaas.signIn({ email }, 'Web Session');
+        console.log('Wallet created:', response.wallet);
+
+        // Once we get here, OTP was successful
+        onClose();
+        router.push('/connected');
+      } catch (error: any) {
+        console.error('Email authentication failed:', error);
+        setError('Authentication failed. Please try again.');
+        setIsEmailLoading(false);
+      }
+    }
+  };
+
+  const handleOTPSubmit = async () => {
+    if (otp.length === 6 && respondWithCode) {
+      setIsOTPLoading(true);
+      setError(null);
+      try {
+        await respondWithCode(otp);
+        // The pending signIn promise will resolve if OTP is correct
+      } catch (error) {
+        console.error('Verification failed:', error);
+        setError('Verification failed. Please try again.');
+        setIsOTPLoading(false);
+      }
     }
   };
 
@@ -94,6 +216,93 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setShowEmailInput(false);
     setEmail('');
   };
+
+  const renderEmailInput = () => (
+    <div className="space-y-4">
+      <div className="relative">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Enter email"
+          className="w-full bg-transparent text-white border border-white/20 rounded-lg px-4 py-3 focus:outline-none focus:border-white/40"
+        />
+      </div>
+
+      {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+
+      <div className="flex gap-4">
+        <button
+          onClick={handleBack}
+          className="flex-1 bg-[#1A1A1A] text-white rounded-full py-3 hover:bg-[#2A2A2A] transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={handleEmailSubmit}
+          disabled={!isValidEmail(email) || isEmailLoading}
+          className={`flex-1 rounded-full py-3 transition-colors relative ${
+            isValidEmail(email)
+              ? 'text-white hover:opacity-90'
+              : 'text-[#4B0082] cursor-not-allowed'
+          }`}
+          style={{
+            background: isValidEmail(email)
+              ? 'linear-gradient(#000, #000) padding-box, linear-gradient(to right, #4B0082, #9400D3) border-box'
+              : undefined,
+            border: isValidEmail(email)
+              ? '2px solid transparent'
+              : '2px solid #4B0082',
+          }}
+        >
+          {isEmailLoading ? 'Sending...' : 'Continue'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderOTPInput = () => (
+    <div className="space-y-4">
+      <p className="text-white text-sm text-center">
+        Enter the 6-digit verification code sent to
+      </p>
+      <p className="text-white font-medium text-center mb-6">{email}</p>
+      <input
+        type="text"
+        value={otp}
+        onChange={(e) => {
+          const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
+          setOTP(value);
+        }}
+        placeholder="000000"
+        maxLength={6}
+        className="w-full bg-transparent text-white border border-white/20 rounded-lg px-4 py-3 focus:outline-none focus:border-white/40 text-center text-2xl tracking-wider font-mono"
+      />
+      {error && (
+        <div className="text-red-500 text-sm text-center mt-2">{error}</div>
+      )}
+      <div className="flex gap-4 mt-6">
+        <button
+          onClick={() => {
+            setShowOTPInput(false);
+            setOTP('');
+            setError(null);
+            setRespondWithCode(null);
+          }}
+          className="flex-1 bg-[#1A1A1A] text-white rounded-full py-3 hover:bg-[#2A2A2A] transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={handleOTPSubmit}
+          disabled={otp.length !== 6 || isOTPLoading}
+          className="flex-1 bg-gradient-to-r from-[#4B0082] to-[#9400D3] text-white rounded-full py-3 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isOTPLoading ? 'Verifying...' : 'Verify'}
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div
@@ -113,7 +322,10 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       >
         {/* Close button */}
         <button
-          onClick={onClose}
+          onClick={async () => {
+            await handleDisconnect(router);
+            onClose();
+          }}
           className="absolute top-4 right-4 text-gray-400 hover:text-white"
         >
           <svg
@@ -137,6 +349,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         </h2>
 
         <div className="relative">
+          {/* Initial view with options */}
           <div
             className={`transform transition-all duration-300 ${
               !showEmailInput
@@ -195,9 +408,10 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 {isConnected && (
                   <div
                     role="button"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
                       disconnect();
+                      await handleDisconnect(router);
                     }}
                     className="absolute top-2 right-2 text-gray-400 hover:text-white cursor-pointer"
                   >
@@ -219,6 +433,8 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               </button>
             </div>
           </div>
+
+          {/* Email/OTP view */}
           <div
             className={`transform transition-all duration-300 ${
               showEmailInput
@@ -226,42 +442,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 : 'opacity-0 translate-x-[100%] absolute inset-0'
             }`}
           >
-            <div className="relative mb-8">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter email"
-                className="w-full bg-transparent text-white border border-white/20 rounded-lg px-4 py-3 focus:outline-none focus:border-white/40"
-              />
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={handleBack}
-                className="flex-1 bg-[#1A1A1A] text-white rounded-full py-3 hover:bg-[#2A2A2A] transition-colors"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleEmailSubmit}
-                disabled={!isValidEmail(email)}
-                className={`flex-1 rounded-full py-3 transition-colors relative ${
-                  isValidEmail(email)
-                    ? 'text-white hover:opacity-90'
-                    : 'text-[#4B0082] cursor-not-allowed'
-                }`}
-                style={{
-                  background: isValidEmail(email)
-                    ? 'linear-gradient(#000, #000) padding-box, linear-gradient(to right, #4B0082, #9400D3) border-box'
-                    : undefined,
-                  border: isValidEmail(email)
-                    ? '2px solid transparent'
-                    : '2px solid #4B0082',
-                }}
-              >
-                Continue
-              </button>
-            </div>
+            {!showOTPInput ? renderEmailInput() : renderOTPInput()}
           </div>
         </div>
       </div>
