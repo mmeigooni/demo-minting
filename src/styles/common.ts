@@ -29,17 +29,6 @@ export const commonStyles = {
 
   // Utility
   flexCenter: 'flex items-center justify-center',
-  textWhite: 'text-white',
-  textSm: 'text-sm',
-  textMd: 'text-md',
-  textLg: 'text-lg',
-  fontMedium: 'font-medium',
-  marginTop2: 'mt-2',
-  marginTop4: 'mt-4',
-  marginTop6: 'mt-6',
-  marginBottom2: 'mb-2',
-  marginBottom4: 'mb-4',
-  marginBottom6: 'mb-6',
 } as const;
 
 export const variants = {

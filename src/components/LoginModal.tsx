@@ -62,11 +62,6 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setRespondWithCode(null);
   };
 
-  const handleEmailSubmit = (newEmail: string) => {
-    setEmail(newEmail);
-    setShowEmailInput(true);
-  };
-
   const handleModalClose = async () => {
     await handleDisconnect(router);
     onClose();
