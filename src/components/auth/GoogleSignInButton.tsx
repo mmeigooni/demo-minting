@@ -53,10 +53,9 @@ export default function GoogleSignInButton({
           }}
           theme="filled_black"
           size="large"
-          type="standard"
+          type="icon"
           text="signin"
-          shape="rectangular"
-          width="200"
+          shape="circle"
         />
       </GoogleOAuthProvider>
       <span className="text-white text-sm mt-2">

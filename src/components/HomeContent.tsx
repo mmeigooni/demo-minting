@@ -22,7 +22,7 @@ export default function HomeContent() {
 
   return (
     <>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center w-1/2">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center w-1/2 z-20">
         <img
           src="https://assets.website-files.com/6172baee6151547debc65160/6172c483b3cd9b59c1b6744c_Frequency-Logo-2.svg"
           loading="lazy"
