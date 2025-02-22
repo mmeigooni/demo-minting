@@ -21,21 +21,22 @@ export default function GoogleSignInButton({
 
   const handleGoogleLogin = async (credentialResponse: CredentialResponse) => {
     if (!credentialResponse.credential) {
-      console.error('No credential received');
+      console.error('GoogleSignInButton: No credential received');
       return;
     }
 
     try {
       setIsLoading(true);
-      console.log('Starting Google authentication...');
+      console.log('GoogleSignInButton: Starting authentication');
 
-      await handleGoogleSignIn(
-        credentialResponse.credential,
-        router,
-        onSuccess
-      );
+      await handleGoogleSignIn(credentialResponse.credential, router, () => {
+        console.log(
+          'GoogleSignInButton: Authentication successful, calling onSuccess'
+        );
+        onSuccess();
+      });
     } catch (error) {
-      console.error('Google authentication failed:', error);
+      console.error('GoogleSignInButton: Authentication failed:', error);
     } finally {
       setIsLoading(false);
     }
@@ -47,14 +48,15 @@ export default function GoogleSignInButton({
         <GoogleLogin
           onSuccess={handleGoogleLogin}
           onError={() => {
-            console.error('Google Login Failed');
+            console.error('GoogleSignInButton: Login Failed');
             setIsLoading(false);
           }}
           theme="filled_black"
           size="large"
-          type="icon"
-          shape="circle"
-          useOneTap
+          type="standard"
+          text="signin"
+          shape="rectangular"
+          width="200"
         />
       </GoogleOAuthProvider>
       <span className="text-white text-sm mt-2">

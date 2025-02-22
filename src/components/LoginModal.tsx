@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { sequenceWaas } from '../config/sequence';
 import { useRouter } from 'next/navigation';
 import { handleDisconnect } from '../utils/auth';
-import { commonStyles, variants } from '../styles/common';
+import { commonStyles } from '../styles/common';
 import EmailForm from './auth/EmailForm';
 import OTPForm from './auth/OTPForm';
 import GoogleSignInButton from './auth/GoogleSignInButton';
@@ -63,26 +64,23 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   };
 
   const handleModalClose = async () => {
+    console.log('LoginModal: Closing modal');
     await handleDisconnect(router);
     onClose();
   };
 
-  return (
+  if (!isOpen) return null;
+
+  const modalContent = (
     <div
-      className={`${commonStyles.modalOverlay} ${
-        isOpen ? variants.visibility.visible : variants.visibility.hidden
-      }`}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           handleModalClose();
         }
       }}
     >
-      <div
-        className={`${commonStyles.modalContent} ${
-          isOpen ? variants.modal.open : variants.modal.closed
-        }`}
-      >
+      <div className="bg-black rounded-lg p-8 max-w-md w-full mx-4 relative">
         {/* Close button */}
         <button onClick={handleModalClose} className={commonStyles.closeButton}>
           <svg
@@ -104,77 +102,66 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         <h2 className={commonStyles.heading}>Sign in</h2>
 
         <div className="relative">
-          {/* Initial view with options */}
-          <div
-            className={`transform transition-all duration-300 ${
-              !showEmailInput
-                ? commonStyles.slideTransition.entering
-                : commonStyles.slideTransition.exiting
-            }`}
-          >
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <button
-                onClick={() => setShowEmailInput(true)}
-                className={commonStyles.authOptionButton}
-              >
-                <div className={commonStyles.iconContainer}>
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="white"
-                    className="w-full h-full"
-                  >
-                    <path d="M20,4H4C2.9,4,2,4.9,2,6v12c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2V6C22,4.9,21.1,4,20,4z M20,8l-8,5L4,8V6l8,5l8-5V8z" />
-                  </svg>
-                </div>
-                <span className="text-white text-sm">Email</span>
-              </button>
+          {!showEmailInput ? (
+            <>
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <button
+                  onClick={() => setShowEmailInput(true)}
+                  className={commonStyles.authOptionButton}
+                >
+                  <div className={commonStyles.iconContainer}>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="white"
+                      className="w-full h-full"
+                    >
+                      <path d="M20,4H4C2.9,4,2,4.9,2,6v12c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2V6C22,4.9,21.1,4,20,4z M20,8l-8,5L4,8V6l8,5l8-5V8z" />
+                    </svg>
+                  </div>
+                  <span className="text-white text-sm">Email</span>
+                </button>
 
-              <GoogleSignInButton onSuccess={onClose} />
-            </div>
+                <GoogleSignInButton onSuccess={onClose} />
+              </div>
 
-            {/* Divider */}
-            <div className={`${commonStyles.flexCenter} mb-8`}>
-              <span className="text-gray-400 text-sm">or select a wallet</span>
-            </div>
+              <div className={commonStyles.flexCenter + ' mb-8'}>
+                <span className="text-gray-400 text-sm">
+                  or select a wallet
+                </span>
+              </div>
 
-            {/* Metamask option */}
-            <div className="grid grid-cols-1 gap-4">
-              <MetaMaskButton onDisconnect={onClose} />
-            </div>
-          </div>
-
-          {/* Email/OTP view */}
-          <div
-            className={`transform transition-all duration-300 ${
-              showEmailInput
-                ? commonStyles.slideTransition.entering
-                : commonStyles.slideTransition.exiting
-            }`}
-          >
-            {!showOTPInput ? (
-              <EmailForm
-                onBack={handleEmailFormBack}
-                onOTPRequired={(respondWithCode) => {
-                  setShowOTPInput(true);
-                  setRespondWithCode(() => respondWithCode);
-                }}
-              />
-            ) : (
-              <OTPForm
-                email={email}
-                onBack={handleOTPFormBack}
-                onSubmit={async (code) => {
-                  if (respondWithCode) {
-                    await respondWithCode(code);
-                    onClose();
-                    router.push('/connected');
-                  }
-                }}
-              />
-            )}
-          </div>
+              <div className="grid grid-cols-1 gap-4">
+                <MetaMaskButton onDisconnect={onClose} />
+              </div>
+            </>
+          ) : !showOTPInput ? (
+            <EmailForm
+              onBack={handleEmailFormBack}
+              onOTPRequired={(respondWithCode) => {
+                setShowOTPInput(true);
+                setRespondWithCode(() => respondWithCode);
+              }}
+            />
+          ) : (
+            <OTPForm
+              email={email}
+              onBack={handleOTPFormBack}
+              onSubmit={async (code) => {
+                if (respondWithCode) {
+                  await respondWithCode(code);
+                  onClose();
+                  router.push('/connected');
+                }
+              }}
+            />
+          )}
         </div>
       </div>
     </div>
   );
+
+  const portalRoot = document.getElementById('modal-root');
+  if (!portalRoot) return null;
+
+  return createPortal(modalContent, portalRoot);
 }
